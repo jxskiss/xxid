@@ -302,7 +302,7 @@ func FromString(id string) (ID, error) {
 
 // FromUUID reads an ID from its UUID string representation.
 func FromUUID(uuid string) (ID, error) {
-	if len(uuid) != uuidLen {
+	if len(uuid) != uuidLen || uuid[24] != '0' || uuid[25] != '0' {
 		return nilID, ErrInvalidID
 	}
 	text := []byte(uuid)
@@ -313,6 +313,9 @@ func FromUUID(uuid string) (ID, error) {
 	copy(text[20:30], uuid[26:36])
 	_, err := hex.Decode(text[:], text[:rawLen*2])
 	if err != nil {
+		return nilID, ErrInvalidID
+	}
+	if text[11] > 0x7f {
 		return nilID, ErrInvalidID
 	}
 	var id ID

@@ -12,7 +12,7 @@ The copy of xid's README below may be outdated.
 
 This xxid package is different from xid in following ways:
 
-1. xxid use 15 bytes for an ID object (xid use 12 bytes):
+1. xxid use 15 bytes for an ID object instead of xid's 12 bytes:
 
    - 4-byte value representing the seconds since epoch 15e8
    - 1-byte random or user specified flag (0-127)
@@ -20,7 +20,7 @@ This xxid package is different from xid in following ways:
    - 2-byte pid or user specified port number
    - 4-byte counter (low 31 bits), starting with a random value
 
-2. xxid use base62 for string representation, generates 20 chars which is same with xid,
+2. xxid use base62 for string representation, generates 20 chars which is same length with xid,
    while keeping both the ID object and string representation K-ordered and sortable as xid.
 
 3. xxid provides a `Generator` type for user to specify flag, IP address and port number,

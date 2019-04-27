@@ -318,6 +318,41 @@ func TestFromUUID_Invariant(t *testing.T) {
 	}
 }
 
+func TestFromUUID_Validation(t *testing.T) {
+	var uuid string
+
+	// valid smallest uuid
+	uuid = "00000000-0000-0000-0000-000000000000"
+	got, err := FromUUID(uuid)
+	if err != nil {
+		t.Errorf("FromUUID() got unexpected err = %v", err)
+	}
+
+	// valid largest uuid
+	uuid = "ffffffff-ffff-ffff-ffff-00ff7fffffff"
+	got, err = FromUUID(uuid)
+	if err != nil {
+		t.Errorf("FromUUID() got unexpected error = %v", err)
+	}
+	if got.String() != string(maxEncoded) {
+		t.Errorf("FromUUID() got wrong max value, got = %v, want = %v", got, string(maxEncoded))
+	}
+
+	// invalid uuid: unused chars
+	uuid = "00000000-0000-0000-0000-010000000000"
+	got, err = FromUUID(uuid)
+	if err != ErrInvalidID {
+		t.Errorf("FromUUID() error got %v, want %v", err, ErrInvalidID)
+	}
+
+	// invalid uuid: counter greater than max possible value
+	uuid = "00000000-0000-0000-0000-000080000000"
+	got, err = FromUUID(uuid)
+	if err != ErrInvalidID {
+		t.Errorf("FromUUID() error got %v, want %v", err, ErrInvalidID)
+	}
+}
+
 func TestFromShort(t *testing.T) {
 	want := New()
 	got, err := FromShort(want.Short())
