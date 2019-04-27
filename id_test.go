@@ -62,6 +62,24 @@ func TestIDPartsExtraction(t *testing.T) {
 	}
 }
 
+func TestGenerator(t *testing.T) {
+	flag := uint8(123)
+	ip := net.ParseIP("10.9.8.7")
+	port := uint16(65432)
+	gen := NewGenerator().UseFlag(flag).UseIP(ip).UsePort(port)
+
+	id := gen.New()
+	if got, want := id.Flag(), flag; got != want {
+		t.Errorf("Flag() = %v, want %v", got, want)
+	}
+	if got, want := id.MachineIP(), ip; got.String() != want.String() {
+		t.Errorf("MachineIP() = %v, want %v", got, want)
+	}
+	if got, want := id.Port(), port; got != want {
+		t.Errorf("Port() = %v, want %v", got, want)
+	}
+}
+
 func TestNew(t *testing.T) {
 	// Generate 10 ids
 	ids := make([]ID, 10)

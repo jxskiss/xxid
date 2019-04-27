@@ -2,6 +2,7 @@ package xxid
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
@@ -20,9 +21,11 @@ type Generator struct {
 	// use this to distinct different IDC, business or whatever they want.
 	flag uint8
 	// counter is atomically incremented when generating a new ID using the
-	// New() function. It's used as a counter part of an id.
-	// This id will be initialized with a random value.
+	// New() function. It's used as the counter part of an id. The counter will
+	// be initialized with a random value.
 	counter uint32
+
+	tmpl ID
 }
 
 // NewGenerator makes a new generator initialized with same machineID and pid
@@ -39,10 +42,10 @@ func NewGenerator() *Generator {
 	g := &Generator{
 		machineID: defaultGenerator.machineID,
 		pid:       defaultGenerator.pid,
+		flag:      randFlag(),
+		counter:   randCounter(),
 	}
-	// Always mark random flag's highest bit to distinct from user specified flag.
-	g.flag = b[0] | 0x80
-	g.counter = uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	g.updateTmpl()
 	return g
 }
 
@@ -51,13 +54,15 @@ func (g *Generator) UseIP(ip net.IP) *Generator {
 	if ip != nil && !ip.Equal(net.IPv4zero) && !ip.IsMulticast() && !ip.IsLoopback() {
 		copy(g.machineID[:], ip)
 	}
+	g.updateTmpl()
 	return g
 }
 
-func (g *Generator) UsePort(port int) *Generator {
+func (g *Generator) UsePort(port uint16) *Generator {
 	if port > 0 {
-		g.pid = uint16(port)
+		g.pid = port
 	}
+	g.updateTmpl()
 	return g
 }
 
@@ -66,6 +71,7 @@ func (g *Generator) UseFlag(flag uint8) *Generator {
 		panic("xxid: invalid flag value out of range 0-127")
 	}
 	g.flag = flag
+	g.updateTmpl()
 	return g
 }
 
@@ -82,4 +88,15 @@ func (g *Generator) NewWithTime(t time.Time) ID {
 // FromShort restore a short int64 id to a full unique ID.
 func (g *Generator) FromShort(short int64) (ID, error) {
 	return fromShort(g, short)
+}
+
+func (g *Generator) updateTmpl() {
+	var tmpl ID
+	// 1 byte flag
+	tmpl[4] = g.flag
+	// machine id, 4 bytes, big endian
+	copy(tmpl[5:9], g.machineID[:])
+	// pid, 2 bytes, big endian
+	binary.BigEndian.PutUint16(tmpl[9:11], g.pid)
+	g.tmpl = tmpl
 }

@@ -42,6 +42,9 @@ func encodeBase62(dst []byte, src []byte) {
 	const bits23base = 1 << 23
 	const dstBase = 62
 
+	// This helps bounds check elimination, may be safely removed.
+	_ = src[rawLen-1]
+
 	// Split src into 4 4-byte words, this is where most of the efficiency comes
 	// from because this is a O(N^2) algorithm, and we make N = N / 4 by working
 	// on 32 bits at a time.
@@ -99,32 +102,32 @@ func decodeBase62(dst []byte, src []byte) error {
 	const uint32base = 1 << 32
 	const bits23base = 1 << 23
 
-	// This line helps BCE (Bounds Check Elimination).
-	// It may be safely removed.
+	// This helps bounds check elimination, may be safely removed.
+	_ = dst[rawLen-1]
 	_ = src[encodedLen-1]
 
 	parts := [encodedLen]byte{
-		dec[src[0]],
-		dec[src[1]],
-		dec[src[2]],
-		dec[src[3]],
-		dec[src[4]],
-		dec[src[5]],
-		dec[src[6]],
-		dec[src[7]],
-		dec[src[8]],
-		dec[src[9]],
+		dec[src[0] & 0x7f],
+		dec[src[1] & 0x7f],
+		dec[src[2] & 0x7f],
+		dec[src[3] & 0x7f],
+		dec[src[4] & 0x7f],
+		dec[src[5] & 0x7f],
+		dec[src[6] & 0x7f],
+		dec[src[7] & 0x7f],
+		dec[src[8] & 0x7f],
+		dec[src[9] & 0x7f],
 
-		dec[src[10]],
-		dec[src[11]],
-		dec[src[12]],
-		dec[src[13]],
-		dec[src[14]],
-		dec[src[15]],
-		dec[src[16]],
-		dec[src[17]],
-		dec[src[18]],
-		dec[src[19]],
+		dec[src[10] & 0x7f],
+		dec[src[11] & 0x7f],
+		dec[src[12] & 0x7f],
+		dec[src[13] & 0x7f],
+		dec[src[14] & 0x7f],
+		dec[src[15] & 0x7f],
+		dec[src[16] & 0x7f],
+		dec[src[17] & 0x7f],
+		dec[src[18] & 0x7f],
+		dec[src[19] & 0x7f],
 	}
 	n := len(dst)
 	bp := parts[:]

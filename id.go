@@ -22,10 +22,10 @@ import (
 // Code modified from the original project github.com/rs/xid
 
 // ID represents a unique request id, consists of
-// - 4 bytes seconds from epoch
-// - 1 byte flag / idc
-// - 4 bytes machine id
-// - 2 bytes pid
+// - 4 bytes seconds since epoch 15e8
+// - 1 byte random or user specified flag
+// - 4 bytes machine id or user specified ip address
+// - 2 bytes pid or user specified port number
 // - 4 bytes counter (low 31 bits)
 type ID [rawLen]byte
 
@@ -63,6 +63,7 @@ func init() {
 	if err == nil && len(b) > 1 {
 		defaultGenerator.pid ^= uint16(crc32.ChecksumIEEE(b))
 	}
+	defaultGenerator.updateTmpl()
 }
 
 func randFlag() uint8 {
@@ -116,15 +117,9 @@ func NewWithTime(t time.Time) ID {
 }
 
 func newID(g *Generator, t time.Time) ID {
-	var id ID
+	var id = g.tmpl
 	// timestamp since epoch, 4 bytes, big endian
-	binary.BigEndian.PutUint32(id[:], uint32(t.Unix()-epoch))
-	// 1 byte flag
-	id[4] = g.flag
-	// machine id, 4 bytes, big endian
-	copy(id[5:], g.machineID[:])
-	// pid, 2 bytes, big endian
-	binary.BigEndian.PutUint16(id[9:11], g.pid)
+	binary.BigEndian.PutUint32(id[0:4], uint32(t.Unix()-epoch))
 	// increment, 4 bytes (low 31 bits), big endian
 	incr := atomic.AddUint32(&g.counter, 1) & 0x7fffffff
 	binary.BigEndian.PutUint32(id[11:15], incr)
@@ -139,8 +134,10 @@ func (id ID) String() string {
 	return *(*string)(unsafe.Pointer(&text))
 }
 
+// UUID returns a UUID form representation of the id.
 func (id ID) UUID() string {
 	text := make([]byte, uuidLen)
+	_ = text[uuidLen-1]
 	hex.Encode(text[6:], id[:])
 	copy(text[0:8], text[6:14])
 	text[8] = '-'
@@ -179,7 +176,7 @@ func (id *ID) UnmarshalText(text []byte) error {
 	if bytes.Compare(text, maxEncoded) > 0 {
 		return ErrInvalidID
 	}
-	decodeBase62(id[:], text)
+	_ = decodeBase62(id[:], text)
 	return nil
 }
 
@@ -207,7 +204,7 @@ func (id ID) Flag() uint8 {
 	if id[5]&0x80 == 0x80 { // not set
 		return 0
 	}
-	return id[5]
+	return id[4]
 }
 
 // Machine returns the 4-byte machine id part of the id.
@@ -298,35 +295,37 @@ func NilID() ID {
 // FromString reads an ID from its string representation.
 func FromString(id string) (ID, error) {
 	x := &ID{}
-	err := x.UnmarshalText([]byte(id))
+	text := *(*[]byte)(unsafe.Pointer(&id))
+	err := x.UnmarshalText(text)
 	return *x, err
 }
 
 // FromUUID reads an ID from its UUID string representation.
 func FromUUID(uuid string) (ID, error) {
-	var id ID
 	if len(uuid) != uuidLen {
-		return id, ErrInvalidID
+		return nilID, ErrInvalidID
 	}
 	text := []byte(uuid)
+	_ = text[uuidLen-1]
 	copy(text[8:12], uuid[9:13])
 	copy(text[12:16], uuid[14:18])
 	copy(text[16:20], uuid[19:23])
 	copy(text[20:30], uuid[26:36])
 	_, err := hex.Decode(text[:], text[:rawLen*2])
 	if err != nil {
-		return id, ErrInvalidID
+		return nilID, ErrInvalidID
 	}
+	var id ID
 	copy(id[:], text)
 	return id, nil
 }
 
 // FromBytes convert the byte array representation of `ID` back to `ID`.
 func FromBytes(b []byte) (ID, error) {
-	var id ID
 	if len(b) != rawLen || b[rawLen-4]&0x80 != 0 {
-		return id, ErrInvalidID
+		return nilID, ErrInvalidID
 	}
+	var id ID
 	copy(id[:], b)
 	return id, nil
 }
@@ -337,17 +336,13 @@ func FromShort(short int64) (ID, error) {
 }
 
 func fromShort(g *Generator, short int64) (ID, error) {
-	var id ID
 	if short < 0 {
-		return id, ErrInvalidID
+		return nilID, ErrInvalidID
 	}
+	var id = g.tmpl
 	// timestamp & counter from short id
 	binary.BigEndian.PutUint32(id[:], uint32(short>>31))
 	binary.BigEndian.PutUint32(id[11:15], uint32(short)&^(1<<31))
-	// flag, machine id and pid from generator
-	id[4] = g.flag
-	copy(id[5:], g.machineID[:])
-	id[9], id[10] = byte(g.pid>>8), byte(g.pid)
 	return id, nil
 }
 
