@@ -124,6 +124,14 @@ func TestIDString(t *testing.T) {
 	}
 }
 
+func TestIDAddr(t *testing.T) {
+	g := NewGenerator().UseIP(net.ParseIP("10.1.2.3")).UsePort(12345)
+	id := g.New()
+	if got, want := id.Addr(), "10.1.2.3:12345"; got != want {
+		t.Errorf("Addr() = %v, want = %v", got, want)
+	}
+}
+
 func TestFromString(t *testing.T) {
 	got, err := FromString("HiR5qKopPNzBU8s7lW0H")
 	if err != nil {

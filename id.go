@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -236,6 +237,18 @@ func (id ID) Pid() uint16 {
 // It's a runtime error to call this method with an invalid id.
 func (id ID) Port() uint16 {
 	return binary.BigEndian.Uint16(id[9:11])
+}
+
+// Addr returns the v4 ip:port format of ip and port info of the id.
+func (id ID) Addr() string {
+	s := make([]byte, 0, 21)
+	for _, x := range id[5:9] {
+		s = strconv.AppendInt(s, int64(x), 10)
+		s = append(s, '.')
+	}
+	s[len(s)-1] = ':'
+	s = strconv.AppendInt(s, int64(id.Port()), 10)
+	return *(*string)(unsafe.Pointer(&s))
 }
 
 // Counter returns the incrementing value part of the id.
