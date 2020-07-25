@@ -165,8 +165,10 @@ func (id ID) MarshalJSON() ([]byte, error) {
 	if id.IsNil() {
 		return []byte("null"), nil
 	}
-	text, err := id.MarshalText()
-	return []byte(`"` + string(text) + `"`), err
+	text := make([]byte, encodedLen+2)
+	encodeBase62(text[1:encodedLen+1], id[:])
+	text[0], text[encodedLen+1] = '"', '"'
+	return text, nil
 }
 
 // UnmarshalText implements encoding/text TextUnmarshaler interface.
