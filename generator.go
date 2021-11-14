@@ -1,102 +1,189 @@
 package xxid
 
 import (
-	"crypto/rand"
-	"encoding/binary"
-	"fmt"
+	"crypto/md5"
+	"hash/crc32"
+	"io/ioutil"
 	"net"
+	"os"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/jxskiss/xxid/v2/machineid"
 )
 
+var (
+	defaultGenerator *Generator
+	counter          uint32
+)
+
+func init() {
+	machineID, mIDType := readMachineID()
+	pid := readProcessID()
+	counter = runtime_fastrand()
+	defaultGenerator = &Generator{
+		mIDType:   mIDType,
+		pidOrPort: pid,
+	}
+	copy(defaultGenerator.machineID[:4], machineID[:])
+}
+
+// A Generator holds some machine information which is used to generate
+// unique IDs. Some information can be configured by user.
 type Generator struct {
-	// machineID stores machine id generated once and used in subsequent calls
-	// to the New() function. When UseIP() is called, the provided IPv4 address
-	// will be stored as machineID.
-	machineID [4]byte
-	// pid stores the current process id. When UsePort() is called, the provided
-	// port will be cast to uint16 and stored as pid.
-	pid uint16
-	// flag can be used to store user defined flag with 7 valid bits (0 - 127),
-	// the default generator's flag will be filled with random bits. User can
-	// use this to distinct different IDC, business or whatever they want.
-	flag uint8
-	// counter is atomically incremented when generating a new ID using the
-	// New() function. It's used as the counter part of an id. The counter will
-	// be initialized with a random value.
-	counter uint32
-
-	tmpl ID
+	mIDType   MachineIDType
+	machineID [16]byte
+	pidOrPort uint16
+	flag      uint16
 }
 
-// NewGenerator makes a new generator initialized with same machineID and pid
-// as the package's default generator, and new random flag and counter, this
-// is useful to specify IP, port and flag instead of the default machineID,
-// process id and random flag.
-// For general purpose without provided IP, port or flag, please just use the
-// package's default functions `New` and `NewWithTime`.
+// NewGenerator makes a new generator initialized with same machineID and
+// pid as the default generator, this is useful to specify machine ID, IP,
+// port and flag value instead of the defaults.
+//
+// For general purpose without configuring machine ID, IP, port or flag,
+// New and NewWithTime are recommended in most cases.
 func NewGenerator() *Generator {
-	var b = make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Errorf("xxid: cannot generate random number: %v", err))
-	}
-	g := &Generator{
+	gen := &Generator{
+		mIDType:   defaultGenerator.mIDType,
 		machineID: defaultGenerator.machineID,
-		pid:       defaultGenerator.pid,
-		flag:      randFlag(),
-		counter:   randCounter(),
+		pidOrPort: defaultGenerator.pidOrPort,
 	}
-	g.updateTmpl()
+	return gen
+}
+
+// UseMachineID changes the machine ID of the generator to user
+// specified bytes.
+//
+// Length of the provided bytes must be 4, 8 or 16, else it panics,
+// the corresponding MachineIDType will be Specified4, Specified8
+// or Specified16.
+func (g *Generator) UseMachineID(id []byte) *Generator {
+	switch len(id) {
+	case 4:
+		g.mIDType = Specified4
+		copy(g.machineID[:4], id)
+	case 8:
+		g.mIDType = Specified8
+		copy(g.machineID[:8], id)
+	case 16:
+		g.mIDType = Specified16
+		copy(g.machineID[:16], id)
+	default:
+		panic(errUnsupportedMachineIDLength)
+	}
 	return g
 }
 
-func (g *Generator) UseIP(ip net.IP) *Generator {
-	ip = ip.To4()
-	if ip != nil && !ip.Equal(net.IPv4zero) && !ip.IsMulticast() && !ip.IsLoopback() {
-		copy(g.machineID[:], ip)
-	}
-	g.updateTmpl()
+// UseIPv4 sets the generator to use the given IP v4 as machine ID.
+func (g *Generator) UseIPv4(ip net.IP) *Generator {
+	g.mIDType = IPv4
+	copy(g.machineID[:4], ip.To4())
 	return g
 }
 
+// UseIPv6 sets the generator to use the given IP v6 as machine ID.
+func (g *Generator) UseIPv6(ip net.IP) *Generator {
+	g.mIDType = IPv6
+	copy(g.machineID[:16], ip.To16())
+	return g
+}
+
+// UsePort sets the generator to use the given port number.
 func (g *Generator) UsePort(port uint16) *Generator {
 	if port > 0 {
-		g.pid = port
+		g.pidOrPort = port
 	}
-	g.updateTmpl()
 	return g
 }
 
-func (g *Generator) UseFlag(flag uint8) *Generator {
-	if flag >= 0x80 {
-		panic("xxid: invalid flag value out of range 0-127")
-	}
-	g.flag = flag
-	g.updateTmpl()
+// UseFlag sets the generator to use the given flag.
+//
+// Note that only 15 bits are allowed for flag, if the highest bit is set,
+// it will be discarded.
+func (g *Generator) UseFlag(flag uint16) *Generator {
+	g.flag = flag | flagMask
 	return g
 }
 
-// New generates a globally unique ID.
+// New generates a unique ID.
 func (g *Generator) New() ID {
-	return newID(g, time.Now())
+	timeMsec, incr := readTimeAndCounter()
+	return newID(g, timeMsec, incr)
 }
 
-// NewWithTime generates a globally unique ID with the given time.
+// NewWithTime generates an ID with the given time.
 func (g *Generator) NewWithTime(t time.Time) ID {
-	return newID(g, t)
+	timeMsec := t.UnixNano() / 1e6
+	incr := incrCounter()
+	return newID(g, timeMsec, incr)
 }
 
-// FromShort restore a short int64 id to a full unique ID.
-func (g *Generator) FromShort(short int64) (ID, error) {
-	return fromShort(g, short)
+// readMachineID reads machine ID from the host operating system.
+// If it fails to get machine ID from the host, it returns a random value.
+func readMachineID() ([4]byte, MachineIDType) {
+	var id [4]byte
+	hid, err := machineid.ID()
+	if err != nil || len(hid) == 0 {
+		hid, err = os.Hostname()
+	}
+	if err == nil && len(hid) != 0 {
+		hw := md5.New()
+		hw.Write([]byte(hid))
+		copy(id[:], hw.Sum(nil))
+		return id, HostID
+	}
+
+	// Fallback to rand number if machine id can't be gathered.
+	x := runtime_fastrand()
+	id[0] = byte(x >> 24)
+	id[1] = byte(x >> 16)
+	id[2] = byte(x >> 8)
+	id[3] = byte(x)
+	return id, Random
 }
 
-func (g *Generator) updateTmpl() {
-	var tmpl ID
-	// 1 byte flag
-	tmpl[4] = g.flag
-	// machine id, 4 bytes, big endian
-	copy(tmpl[5:9], g.machineID[:])
-	// pid, 2 bytes, big endian
-	binary.BigEndian.PutUint16(tmpl[9:11], g.pid)
-	g.tmpl = tmpl
+func readProcessID() uint16 {
+	pid := uint16(os.Getpid())
+	// If /proc/self/cpuset exists and is not /, we can assume that we are in a
+	// form of container and use the content of cpuset xor-ed with the PID in
+	// order to get a reasonable machine global unique PID.
+	b, err := ioutil.ReadFile("/proc/self/cpuset")
+	if err == nil && len(b) > 1 {
+		pid ^= uint16(crc32.ChecksumIEEE(b))
+	}
+	return pid
+}
+
+func randFlag() uint16 {
+	return uint16(runtime_fastrand() >> 17)
+}
+
+func incrCounter() uint16 {
+	return uint16(atomic.AddUint32(&counter, 1))
+}
+
+var (
+	incrMu         sync.Mutex
+	timeAndCounter int64
+)
+
+// readTimeAndCounter guarantees that the combination of the returned
+// time and counter will never be duplicate inside a process, even the
+// clock has been turned back or leap second happens.
+func readTimeAndCounter() (timeMsec int64, counter uint16) {
+	t := time.Now().UnixNano() / 1e6
+	c := incrCounter()
+	tac := t<<16 | int64(c) // time and counter
+
+	incrMu.Lock()
+	prev := timeAndCounter
+	if tac <= prev {
+		tac = prev + 1
+		t, c = tac>>16, uint16(tac)
+	}
+	timeAndCounter = tac
+	incrMu.Unlock()
+	return t, c
 }

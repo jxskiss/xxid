@@ -1,6 +1,6 @@
 // +build windows
 
-package xxid
+package machineid
 
 import (
 	"fmt"
