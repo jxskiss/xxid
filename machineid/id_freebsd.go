@@ -1,6 +1,6 @@
 // +build freebsd
 
-package xxid
+package machineid
 
 import "syscall"
 

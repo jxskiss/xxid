@@ -1,3 +1,3 @@
-module github.com/jxskiss/xxid
+module github.com/jxskiss/xxid/v2
 
-go 1.9
+go 1.13

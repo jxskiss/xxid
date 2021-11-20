@@ -1,9 +1,9 @@
 // +build !darwin,!linux,!freebsd,!windows
 
-package xxid
+package machineid
 
 import "errors"
 
 func readPlatformMachineID() (string, error) {
-	return "", errors.New("not implemented")
+	return "", errors.New("not implemented for this platform")
 }
