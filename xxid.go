@@ -20,7 +20,8 @@ import (
 //
 // An ID consists of the following parts:
 // 1. millisecond timestamp;
-// 2. machine ID, which may host identifier, IP address or user specified bytes;
+// 2. machine ID, which may be the host identifier, an IP address or user
+// specified bytes;
 // 3. process ID or user specified port number;
 // 4. a counter, starts at a random value;
 // 5. a flag value, random or user specified;
@@ -29,9 +30,9 @@ import (
 // is short and takes less space, the base62 form encodes the binary form
 // with base62 encoding, and the string form is friendly to human, it
 // encodes the ID using number digits and hex, user can read the content
-// of an ID from the string form, the string form is good for scenes where
-// user may need to inspect the content frequently (e.g. logging or tracing
-// identifier).
+// of an ID from the string representation, the string form is good for
+// scenes where user may need to inspect the content frequently (e.g.
+// logging or tracing identifiers).
 type ID struct {
 	timeMsec  int64
 	pidOrPort uint16
@@ -227,7 +228,8 @@ func (id ID) Counter() uint16 {
 }
 
 // Short returns the time and counter value of the ID as an int64, the
-// returned value is guaranteed to be unique inside a process.
+// returned value is guaranteed to be unique inside a process, even the
+// clock has been turned back or leap second happens.
 func (id ID) Short() int64 {
 	return id.timeMsec<<16 | int64(id.counter)
 }

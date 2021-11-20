@@ -1,16 +1,23 @@
 # XXID Unique ID Generator
 
-[![godoc](http://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/jxskiss/xxid) [![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/jxskiss/xxid/master/LICENSE)
+[![godoc](http://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/jxskiss/xxid/v2) [![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/jxskiss/xxid/master/LICENSE)
 
-Package xxid is a specific kind of unique id generator, originally forked from [xid][].
+Package xxid is a specific kind of unique id generator, it was originally forked from [rs/xid][].
 
 The v2 version has been totally redesigned and rewritten.
 
-[xid]: https://github.com/rs/xid/
+[rs/xid]: https://github.com/rs/xid/
 
 ## Introduction
 
 TODO
+
+(mention clock adjusted back and leap second)
+
+(mention https://github.com/segmentio/ksuid)
+(mention https://github.com/rs/xid)
+
+(mention security concerns)
 
 ## Install
 
